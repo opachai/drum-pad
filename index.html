@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>簡易ドラムパッド</title>
+<style>
+  body { font-family: sans-serif; background: #1a1a1a; color: #fff; text-align: center; padding: 20px; }
+  h1 { font-size: 1.5em; }
+  #pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-width: 500px; margin: 20px auto; }
+  .pad { height: 80px; background: #333; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; font-size: 0.9em; }
+  .pad.active { background: #e74c3c; }
+  #status { margin: 15px; font-size: 0.9em; color: #aaa; }
+  button { padding: 10px 20px; margin: 10px; background: #3498db; color: #fff; border: none; border-radius: 5px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <h1>簡易ドラムパッド</h1>
+  <div id="status">MIDIを接続中...</div>
+  <button id="connect">MIDI接続</button>
+  <div id="pads"></div>
+
+<script>
+const pads = document.getElementById('pads');
+const status = document.getElementById('status');
+const notes = ['Kick', 'Snare', 'Hi-Hat', 'Clap', 'Tom1', 'Tom2', 'Ride', 'Crash',
+               'Perc1', 'Perc2', 'Perc3', 'Perc4', 'FX1', 'FX2', 'FX3', 'FX4'];
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// Create pads
+notes.forEach((name, i) => {
+  const div = document.createElement('div');
+  div.className = 'pad';
+  div.textContent = name;
+  div.dataset.note = 36 + i;
+  div.dataset.type = name.toLowerCase();
+  div.addEventListener('mousedown', () => playPad(div));
+  div.addEventListener('mouseup', () => div.classList.remove('active'));
+  div.addEventListener('touchstart', (e) => { e.preventDefault(); playPad(div); });
+  pads.appendChild(div);
+});
+
+function playPad(pad) {
+  pad.classList.add('active');
+  const type = pad.dataset.type;
+  const vel = 1.0;
+
+  if (type.includes('kick')) playKick(vel);
+  else if (type.includes('snare')) playSnare(vel);
+  else if (type.includes('hi-hat') || type.includes('hat')) playHiHat(vel);
+  else if (type.includes('clap')) playClap(vel);
+  else if (type.includes('tom')) playTom(vel);
+  else if (type.includes('ride')) playRide(vel);
+  else if (type.includes('crash')) playCrash(vel);
+  else playPerc(vel);
+
+  setTimeout(() => pad.classList.remove('active'), 150);
+}
+
+function playKick(vel = 1) {
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(150, t);
+  osc.frequency.exponentialRampToValueAtTime(40, t + 0.1);
+  gain.gain.setValueAtTime(vel * 0.9, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.4);
+}
+
+function playSnare(vel = 1) {
+  const t = audioCtx.currentTime;
+  // Noise
+  const bufferSize = audioCtx.sampleRate * 0.2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(vel * 0.6, t);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 1000;
+  noise.connect(filter);
+  filter.connect(noiseGain);
+  noiseGain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.2);
+
+  // Tone
+  const osc = audioCtx.createOscillator();
+  const oscGain = audioCtx.createGain();
+  osc.frequency.setValueAtTime(180, t);
+  oscGain.gain.setValueAtTime(vel * 0.3, t);
+  oscGain.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+  osc.connect(oscGain);
+  oscGain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.1);
+}
+
+function playHiHat(vel = 1) {
+  const t = audioCtx.currentTime;
+  const bufferSize = audioCtx.sampleRate * 0.1;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vel * 0.4, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 7000;
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.08);
+}
+
+function playClap(vel = 1) {
+  const t = audioCtx.currentTime;
+  for (let i = 0; i < 3; i++) {
+    const delay = i * 0.02;
+    const bufferSize = audioCtx.sampleRate * 0.05;
+    const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let j = 0; j < bufferSize; j++) data[j] = Math.random() * 2 - 1;
+    const noise = audioCtx.createBufferSource();
+    noise.buffer = buffer;
+    const gain = audioCtx.createGain();
+    gain.gain.setValueAtTime(vel * 0.5, t + delay);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.05);
+    const filter = audioCtx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1500;
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(audioCtx.destination);
+    noise.start(t + delay);
+    noise.stop(t + delay + 0.05);
+  }
+}
+
+function playTom(vel = 1) {
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(200, t);
+  osc.frequency.exponentialRampToValueAtTime(80, t + 0.2);
+  gain.gain.setValueAtTime(vel * 0.7, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start(t);
+  osc.stop(t + 0.3);
+}
+
+function playRide(vel = 1) {
+  playHiHat(vel * 0.7);
+}
+
+function playCrash(vel = 1) {
+  const t = audioCtx.currentTime;
+  const bufferSize = audioCtx.sampleRate * 0.4;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(vel * 0.6, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 3000;
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(t);
+  noise.stop(t + 0.4);
+}
+
+function playPerc(vel = 1) {
+  playSnare(vel * 0.6);
+}
+
+// MIDI
+let midiAccess = null;
+async function connectMIDI() {
+  try {
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    midiAccess = await navigator.requestMIDIAccess();
+    status.textContent = 'MIDI接続成功！';
+    for (let input of midiAccess.inputs.values()) {
+      input.onmidimessage = onMIDIMessage;
+    }
+  } catch (e) {
+    status.textContent = 'MIDI接続失敗: ' + e.message;
+  }
+}
+
+function onMIDIMessage(event) {
+  const [statusByte, note, velocity] = event.data;
+  if (statusByte === 144 && velocity > 0) {
+    const boostedVel = Math.min(1.0, (velocity / 127) * 1.8 + 0.2);
+    const pad = document.querySelector(`[data-note="${note}"]`);
+    if (pad) {
+      pad.classList.add('active');
+      const type = pad.dataset.type;
+      if (type.includes('kick')) playKick(boostedVel);
+      else if (type.includes('snare')) playSnare(boostedVel);
+      else if (type.includes('hi-hat') || type.includes('hat')) playHiHat(boostedVel);
+      else if (type.includes('clap')) playClap(boostedVel);
+      else if (type.includes('tom')) playTom(boostedVel);
+      else if (type.includes('ride')) playRide(boostedVel);
+      else if (type.includes('crash')) playCrash(boostedVel);
+      else playPerc(boostedVel);
+      setTimeout(() => pad.classList.remove('active'), 150);
+    }
+  }
+}
+
+document.getElementById('connect').addEventListener('click', connectMIDI);
+
+if (navigator.requestMIDIAccess) {
+  connectMIDI();
+} else {
+  status.textContent = 'このブラウザはMIDI非対応です。Chrome/Edgeを使ってください。';
+}
+</script>
+</body>
+</html>
